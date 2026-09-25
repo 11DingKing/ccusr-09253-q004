@@ -138,3 +138,125 @@ class DiffOut(BaseModel):
     new_event_cutoff_id: str | None
     student_changes: list[dict[str, Any]]
     students_affected: int
+
+
+# ---------------------------------------------------------------------------
+# 导师委托链
+# ---------------------------------------------------------------------------
+
+
+class MentorAssignmentIn(BaseModel):
+    student_id: str = Field(..., min_length=1, max_length=128)
+    mentor_id: str = Field(..., min_length=1, max_length=128)
+
+
+class MentorAssignmentOut(BaseModel):
+    plan_version: str
+    student_id: str
+    mentor_id: str
+
+
+class DelegationIn(BaseModel):
+    grant_id: str = Field(..., min_length=1, max_length=128)
+    grantor_id: str = Field(..., min_length=1, max_length=128)
+    grantee_id: str = Field(..., min_length=1, max_length=128)
+    student_id: str = Field(..., min_length=1, max_length=128)
+    starts_at: datetime
+    ends_at: datetime
+    reason: str = Field("", max_length=512)
+
+    @field_validator("starts_at", "ends_at")
+    @classmethod
+    def _ensure_aware(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            raise ValueError("timestamps must be timezone-aware (RFC 3339)")
+        return v
+
+
+class DelegationOut(BaseModel):
+    grant_id: str
+    plan_version: str
+    grantor_id: str
+    grantee_id: str
+    student_id: str
+    starts_at: str
+    ends_at: str
+    state: str
+    version: int
+    reason: str
+    created_at: str
+    revoked_at: str | None
+    revoke_reason: str | None
+
+
+class RevocationIn(BaseModel):
+    revoked_by: str = Field(..., min_length=1, max_length=128)
+    reason: str = Field(..., min_length=1, max_length=512)
+    revoked_at: datetime | None = None
+
+    @field_validator("revoked_at")
+    @classmethod
+    def _ensure_aware(cls, v: datetime | None) -> datetime | None:
+        if v is not None and v.tzinfo is None:
+            raise ValueError("timestamps must be timezone-aware (RFC 3339)")
+        return v
+
+
+class PermissionQueryOut(BaseModel):
+    authorized: bool
+    responsible_mentor_id: str
+    operator_id: str
+    student_id: str
+    checked_at: str
+    authority: str
+    denial_reason: str | None
+    chain: list[dict[str, Any]]
+    matching_grants: list[DelegationOut]
+
+
+class ConfirmIn(BaseModel):
+    confirmation_id: str = Field(..., min_length=1, max_length=128)
+    checkin_event_id: str = Field(..., min_length=1, max_length=128)
+    operator_id: str = Field(..., min_length=1, max_length=128)
+    confirmed_at: datetime | None = None
+
+    @field_validator("confirmed_at")
+    @classmethod
+    def _ensure_aware(cls, v: datetime | None) -> datetime | None:
+        if v is not None and v.tzinfo is None:
+            raise ValueError("timestamps must be timezone-aware (RFC 3339)")
+        return v
+
+
+class BatchConfirmIn(BaseModel):
+    confirms: list[ConfirmIn] = Field(..., min_length=1)
+
+
+class ConfirmationOut(BaseModel):
+    confirmation_id: str
+    plan_version: str
+    checkin_event_id: str
+    student_id: str
+    operator_id: str
+    responsible_mentor_id: str
+    authority: str
+    grant_id: str | None
+    grant_version: int | None
+    delegation_chain: list[dict[str, Any]]
+    confirmed_at: str
+    created_at: str
+    recorded_grant_states: list[str | None]
+    current_grant_states: list[str | None]
+    still_legally_valid: bool
+
+
+class BatchConfirmOut(BaseModel):
+    confirmed: list[ConfirmationOut]
+    count: int
+
+
+class ReverifyOut(BaseModel):
+    confirmation_id: str
+    valid: bool
+    checks: list[dict[str, Any]]
+    explanation: ConfirmationOut

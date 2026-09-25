@@ -139,17 +139,18 @@ def replay(
     checkins_by_student: dict[str, list[CheckinRecord]] = {}
     checkin_index: dict[str, CheckinRecord] = {}
     adjustments_by_student: dict[str, list[Adjustment]] = {}
+    confirmations: list[Event] = []
 
+    # 确认事件通过 checkin_event_id 显式关联签到，其 event_id 并不保证在
+    # 词法上排在签到之后（例如委托确认事件使用独立的 confirmation_id）。
+    # 先建立签到索引，再统一套用确认，避免对 ID 排序的隐式依赖。
     for event in sorted_events:
         if event.event_type == EventType.CHECKIN:
             record = _parse_checkin(event, timezone_name)
             checkins_by_student.setdefault(event.student_id, []).append(record)
             checkin_index[event.event_id] = record
         elif event.event_type == EventType.MENTOR_CONFIRM:
-            target_id = event.payload.get("checkin_event_id")
-            target = checkin_index.get(target_id)
-            if target is not None and target.student_id == event.student_id:
-                target.status = CheckinStatus.CONFIRMED
+            confirmations.append(event)
         elif event.event_type == EventType.LEAVE_CORRECTION:
             seconds = int(event.payload.get("adjustment_seconds", 0))
             adjustments_by_student.setdefault(event.student_id, []).append(
@@ -160,6 +161,12 @@ def replay(
                     reason=str(event.payload.get("reason", "")),
                 )
             )
+
+    for event in confirmations:
+        target_id = event.payload.get("checkin_event_id")
+        target = checkin_index.get(target_id)
+        if target is not None and target.student_id == event.student_id:
+            target.status = CheckinStatus.CONFIRMED
 
     all_students = set(checkins_by_student) | set(adjustments_by_student)
     students: dict[str, StudentProgress] = {}

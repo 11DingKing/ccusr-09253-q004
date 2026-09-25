@@ -3,16 +3,15 @@ from __future__ import annotations
 from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.db import make_engine
 from app.db import get_db
 from app.main import app
 from app.models import Base
 
-test_engine = create_engine(
+test_engine = make_engine(
     "sqlite:///./practice_hours_test.db",
-    connect_args={"check_same_thread": False, "timeout": 30},
 )
 TestSessionLocal = sessionmaker(bind=test_engine, autoflush=False, autocommit=False, future=True)
 

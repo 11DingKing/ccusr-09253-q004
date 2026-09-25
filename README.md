@@ -19,3 +19,29 @@ python3 -m compileall -q app tests
 ```
 
 测试覆盖事件幂等导入、跨时区与跨日学时合并、实习确认、负向修正、冻结快照和差异查询；运行过程中不需要单独的数据库或网络服务。
+
+## 导师确认委托链
+
+实习签到必须由负责导师确认；导师出差时可以把**指定学员、指定时间段**委托给另一位老师。委托支持链式转委托，并满足以下约束：
+
+- **有期限**：每条委托都有带时区的 `[starts_at, ends_at)` 窗口（起点含、终点不含），过期自动失效；
+- **不可循环**：新增委托时做区间可达性分析，只要新边在任意时刻形成回路即拒绝；同一导师对同一学员的生效窗口不可重叠；转委托的窗口不得超出自身仍持有授权的范围；
+- **撤销**：仅委托人本人或负责导师可撤销，撤销会使下游子委托级联失效并各自产生新版本；撤销不溯及既往——已经合法确认的记录永久有效；
+- **确认证据**：确认事件固化实际操作人 `operator_id`、原责任人 `responsible_mentor_id`、授权类型（`direct`/`delegated`）、每跳委托的 `grant_id`+`grant_version` 与完整链路快照；
+- **越权/过期拒绝**：授权只在确认写入瞬间解析；批量确认在单事务内校验并写入，要么全部成功，要么整体回滚不落库。
+
+接口（均位于 `/api/plans/{plan_version}` 下）：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/students/{student_id}/mentor` | 登记学员的负责导师（原责任人基准） |
+| POST | `/delegations` | 新增委托（校验重叠、成环、授权范围） |
+| POST | `/delegations/{grant_id}/revoke` | 撤销委托（含下游级联） |
+| GET | `/delegations` | 委托列表，可按 `student_id`/`mentor_id` 过滤 |
+| GET | `/students/{student_id}/can-confirm?operator_id=..&at=..` | 权限查询，返回授权结论与匹配链路 |
+| POST | `/confirmations` | 单条授权确认（确认 ID 幂等） |
+| POST | `/confirmations/batch` | 批量确认，全成全败 |
+| GET | `/confirmations/{id}` / `/explain` | 确认解释：操作人、责任人、授权版本、链路与撤销前后状态 |
+| GET | `/confirmations/{id}/reverify` | 重启/审计复核：逐跳比对不可变版本历史与确认时刻窗口 |
+
+所有时间必须是带时区偏移的 RFC 3339 时间；服务端统一在 UTC 下比较窗口，跨时区与夏令时边界均按真实时刻判定。
