@@ -52,6 +52,8 @@ class CheckinRecord:
     start_utc: datetime
     end_utc: datetime
     status: CheckinStatus
+    confirm_event_id: str | None = None
+    confirmation: dict[str, Any] | None = None
 
     @property
     def seconds(self) -> int:
@@ -150,6 +152,9 @@ def replay(
             target = checkin_index.get(target_id)
             if target is not None and target.student_id == event.student_id:
                 target.status = CheckinStatus.CONFIRMED
+                target.confirm_event_id = event.event_id
+                if _has_actor_evidence(event.payload):
+                    target.confirmation = _confirmation_view(event.event_id, event.payload)
         elif event.event_type == EventType.LEAVE_CORRECTION:
             seconds = int(event.payload.get("adjustment_seconds", 0))
             adjustments_by_student.setdefault(event.student_id, []).append(
@@ -244,4 +249,25 @@ def explain_checkin(record: CheckinRecord, tz_name: str) -> dict[str, Any]:
             }
             for day, seg_start, seg_end in segments
         ],
+        "confirmation": record.confirmation,
+    }
+
+
+def _has_actor_evidence(payload: dict[str, Any]) -> bool:
+    """旧格式 mentor_confirm（直接导入、无委托元数据）不附带授权证据。"""
+    return "actor_mentor_id" in payload
+
+
+def _confirmation_view(
+    confirm_event_id: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    return {
+        "confirm_event_id": confirm_event_id,
+        "actor_mentor_id": payload.get("actor_mentor_id"),
+        "responsible_mentor_id": payload.get("responsible_mentor_id"),
+        "grant_id": payload.get("grant_id"),
+        "grant_version": payload.get("grant_version"),
+        "chain_length": payload.get("chain_length", 0),
+        "delegation_path": payload.get("delegation_path", []),
+        "authorized_at": payload.get("authorized_at"),
     }

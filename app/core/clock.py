@@ -8,6 +8,29 @@ from zoneinfo import ZoneInfo
 SECONDS_PER_LESSON = 45 * 60  # a 45-minute teaching unit
 
 
+class Clock:
+    """可替换的 UTC 时钟，测试可冻结到任意时刻。"""
+
+    def __init__(self) -> None:
+        self._fixed: datetime | None = None
+
+    def now(self) -> datetime:
+        if self._fixed is not None:
+            return self._fixed
+        return datetime.now(timezone.utc)
+
+    def freeze(self, moment: datetime) -> None:
+        if moment.tzinfo is None:
+            raise ValueError("冻结时刻必须包含时区")
+        self._fixed = moment.astimezone(timezone.utc)
+
+    def reset(self) -> None:
+        self._fixed = None
+
+
+clock = Clock()
+
+
 def get_zone(tz_name: str) -> ZoneInfo:
     """执行确定性的业务处理。"""
     return ZoneInfo(tz_name)

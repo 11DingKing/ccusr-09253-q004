@@ -92,6 +92,7 @@ class CheckinExplanation(BaseModel):
     check_out_at_utc: str
     raw_seconds: int
     academic_days: list[dict[str, Any]]
+    confirmation: dict[str, Any] | None = None
 
 
 class AdjustmentOut(BaseModel):
@@ -138,3 +139,47 @@ class DiffOut(BaseModel):
     new_event_cutoff_id: str | None
     student_changes: list[dict[str, Any]]
     students_affected: int
+
+
+def _aware(v: datetime) -> datetime:
+    if v.tzinfo is None:
+        raise ValueError("timestamps must be timezone-aware (RFC 3339)")
+    return v
+
+
+class MentorAssignmentIn(BaseModel):
+    mentor_id: str = Field(..., min_length=1, max_length=128)
+
+
+class DelegationIn(BaseModel):
+    grant_id: str = Field(..., min_length=1, max_length=128)
+    student_id: str = Field(..., min_length=1, max_length=128)
+    delegator_id: str = Field(..., min_length=1, max_length=128)
+    grantee_id: str = Field(..., min_length=1, max_length=128)
+    starts_at: datetime
+    ends_at: datetime
+    actor_id: str = Field(..., min_length=1, max_length=128)
+    reason: str = Field("", max_length=512)
+
+    @field_validator("starts_at", "ends_at")
+    @classmethod
+    def _ensure_aware(cls, v: datetime) -> datetime:
+        return _aware(v)
+
+
+class RevokeIn(BaseModel):
+    actor_id: str = Field(..., min_length=1, max_length=128)
+    reason: str = Field(..., min_length=1, max_length=512)
+
+
+class ConfirmBatchIn(BaseModel):
+    actor_mentor_id: str = Field(..., min_length=1, max_length=128)
+    checkin_event_ids: list[str] = Field(..., min_length=1)
+    at: datetime | None = None
+
+    @field_validator("at")
+    @classmethod
+    def _ensure_aware(cls, v: datetime | None) -> datetime | None:
+        if v is None:
+            return v
+        return _aware(v)
